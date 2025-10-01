@@ -29,3 +29,13 @@ This file tracks the tasks for building an interactive terminal application for 
 *   **What:** From within the TUI, add an option to export the currently viewed data (either the full list or a single Pokémon) to a file.
 *   **Why:** This brings the data export functionality into the new interactive paradigm.
 *   **How:** Add an 'export' option to the views. When triggered, use the `encoding/csv` or `encoding/json` packages to write the data to a file.
+
+---
+
+### Enhancement: Modularize the Code
+*   **What:** Refactor the code into a more modular structure.
+*   **Why:** As the TUI grows, the logic for different views (the main menu, the list view, the detail view) can become complex. Separating the code for each view into its own file or package will make the project much easier to maintain and contribute to.
+*   **How:**
+    1.  Create a new directory, for example, `internal/tui`.
+    2.  Inside `tui`, create separate files for different components of the application (e.g., `model.go` for the main model, `list_view.go` for the Pokémon list, `detail_view.go` for the single Pokémon view).
+    3.  Move the relevant code from `main.go` into these new files. The `main.go` file should then become a simple entry point that initializes and runs the main TUI model.
