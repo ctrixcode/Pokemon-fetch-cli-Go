@@ -1,7 +1,7 @@
 package main
 
 import (
-	"ctrix/poke-server/pokemon"
+	"ctrix/pokemon-fetch-cli-go/pokemon"
 )
 
 func main() {

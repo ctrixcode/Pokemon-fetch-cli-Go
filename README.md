@@ -1,33 +1,28 @@
-# Poke-Go-Server
+# Pokémon Fetch CLI (Go)
 
-A simple "Hello, World!" web server in Go. This project is a great starting point for new contributors who want to participate in Hacktoberfest!
+A simple Go command-line tool (`pokemon-fetch-cli-go`) to fetch Pokémon data from the [PokéAPI](https://pokeapi.co/) and store it locally.
+
+## How It Works
+
+When you run the application, it fetches data for the first 151 Pokémon from the PokéAPI and saves it into a `pokedex.json` file in the project's root directory.
 
 ## Getting Started
 
-To get a local copy up and running, follow these simple steps.
+To run the application, follow these steps:
 
-### Prerequisites
-
-*   Go (Golang) installed on your machine.
-
-### Installation
-
-1.  Clone the repo
+1.  **Clone the repository**
     ```sh
-    git clone https://github.com/your_username/Poke-Go-Server.git
+    git clone <repository-url>
     ```
-2.  Run the server
+
+2.  **Run the application**
     ```sh
     go run main.go
     ```
-3.  Open your browser and navigate to `http://localhost:8080` to see the "Hello, World!" message.
+    After running, you will find a `pokedex.json` file in the project directory containing the fetched data.
 
 ## Contributing
 
-Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+This project is just getting started! The goal is to add more features for processing and exporting the stored Pokémon data.
 
-Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
-
-## License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+Contributions are welcome! Please see the [CONTRIBUTING.md](./CONTRIBUTING.md) and check out the [TODO list](./docs/todo.md) for planned features.
