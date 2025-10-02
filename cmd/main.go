@@ -15,11 +15,9 @@ func main() {
 	var listFlag = flag.Bool("list", false, "Show interactive Pokemon list")
 	flag.Parse()
 
-	// If no flags are provided, default to fetch behavior for backward compatibility
+	// If no flags are provided, show help
 	if !*fetchFlag && !*listFlag {
-		fmt.Println("Fetching Pokemon data...")
-		pokemon.StoreData()
-		fmt.Println("Pokemon data fetched successfully! Use --list to view the interactive list.")
+		showHelp()
 		return
 	}
 
@@ -50,4 +48,21 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func showHelp() {
+	fmt.Println("Pokemon Fetch CLI")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  go run cmd/main.go [flags]")
+	fmt.Println()
+	fmt.Println("Flags:")
+	fmt.Println("  --fetch    Fetch Pokemon data from the API")
+	fmt.Println("  --list     Show interactive Pokemon list (requires data to be fetched first)")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  go run cmd/main.go --fetch           # Fetch data only")
+	fmt.Println("  go run cmd/main.go --list            # Show list only (requires existing data)")
+	fmt.Println("  go run cmd/main.go --fetch --list    # Fetch data and show list")
+	fmt.Println()
 }
