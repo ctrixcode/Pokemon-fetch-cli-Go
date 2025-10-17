@@ -1,0 +1,12 @@
+[
+  {
+    "ID": "3",
+    "Name": "Venusaur",
+    "File": "data\\3.json"
+  },
+  {
+    "ID": "1",
+    "Name": "Bulbasaur",
+    "File": "data\\1.json"
+  }
+]

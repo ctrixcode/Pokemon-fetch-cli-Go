@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -117,22 +118,44 @@ func fetchPokemonData(id int, wq *sync.WaitGroup) {
 	wq.Done()
 }
 func storePokemon(respBody io.ReadCloser) {
+	defer respBody.Close()
+
 	body, err := io.ReadAll(respBody)
 	if err != nil {
-		fmt.Println("Error during Converting body into byte", ": ", err)
+		fmt.Println("Error reading response body:", err)
+		return
 	}
+
 	var data PokemonData
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		fmt.Println("err:", err)
+	if err := json.Unmarshal(body, &data); err != nil {
+		fmt.Println("Error unmarshalling JSON for ID", data.Id, ":", err)
+		return
 	}
-	dataFiltered, err := json.Marshal(data)
+
+	// Absolute path to project root folder
+	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Println("Error trying to convert filtered data into byte", data.Id, ": ", err)
+		fmt.Println("Error getting executable path:", err)
+		return
 	}
-	// fmt.Println(data.Id, data.Name)
-	os.WriteFile("data/"+fmt.Sprint(data.Id)+".json", dataFiltered, 0655)
+	projectRoot := filepath.Dir(exePath)
+
+	// Data folder in project root
+	dataDir := filepath.Join(projectRoot, "data")
+	if err := os.MkdirAll(dataDir, os.ModePerm); err != nil {
+		fmt.Println("Error creating data folder:", err)
+		return
+	}
+
+	filePath := filepath.Join(dataDir, fmt.Sprintf("%d.json", data.Id))
+	if err := os.WriteFile(filePath, body, 0644); err != nil {
+		fmt.Println("Error writing file for ID", data.Id, ":", err)
+		return
+	}
+
+	fmt.Println("Saved Pokémon file:", filePath)
 }
+
 func StoreData() {
 	if _, err := os.Stat("pokemon/init.txt"); errors.Is(err, os.ErrNotExist) {
 		fetchAllPokemon()

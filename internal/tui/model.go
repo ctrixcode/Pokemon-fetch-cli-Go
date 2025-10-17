@@ -1,7 +1,8 @@
 package tui
 
 import (
-	"github.com/aviralgarg05/Pokemon-fetch-cli-Go/pokemon"
+	"ctrix/pokemon-fetch-cli-go/pokemon"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
