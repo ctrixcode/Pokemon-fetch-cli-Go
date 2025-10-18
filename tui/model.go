@@ -4,8 +4,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+)
+
+// viewMode represents the current view
+type viewMode int
+
+const (
+	listViewMode viewMode = iota
+	lookupViewMode
 )
 
 // PokemonListItem represents a single Pokemon in the list
@@ -17,13 +25,15 @@ type PokemonListItem struct {
 
 // Model represents the TUI state for the Pokemon list
 type Model struct {
-	pokemonList  []PokemonListItem
-	cursor       int
-	selected     map[int]struct{}
-	width        int
-	height       int
-	loading      bool
-	err          error
+	pokemonList []PokemonListItem
+	cursor      int
+	selected    map[int]struct{}
+	width       int
+	height      int
+	loading     bool
+	err         error
+	currentView viewMode
+	lookupView  *LookupView
 }
 
 // Styling
@@ -53,6 +63,7 @@ func NewModel() Model {
 		pokemonList: []PokemonListItem{},
 		selected:    make(map[int]struct{}),
 		loading:     true,
+		currentView: listViewMode,
 	}
 }
 
@@ -63,6 +74,26 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles user input and updates the model state
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle view switching messages
+	switch msg.(type) {
+	case switchToListViewMsg:
+		m.currentView = listViewMode
+		m.lookupView = nil
+		return m, nil
+
+	case switchToLookupViewMsg:
+		m.currentView = lookupViewMode
+		m.lookupView = NewLookupView()
+		return m, m.lookupView.Init()
+	}
+
+	// Delegate to lookup view if active
+	if m.currentView == lookupViewMode && m.lookupView != nil {
+		cmd := m.lookupView.Update(msg)
+		return m, cmd
+	}
+
+	// Handle list view updates
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -77,6 +108,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+
+		case "l", "L":
+			// Switch to lookup view
+			m.currentView = lookupViewMode
+			m.lookupView = NewLookupView()
+			return m, m.lookupView.Init()
 
 		case "up", "k":
 			if m.cursor > 0 {
@@ -125,6 +162,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the TUI
 func (m Model) View() string {
+	// Show lookup view if active
+	if m.currentView == lookupViewMode && m.lookupView != nil {
+		return m.lookupView.View()
+	}
+
+	// Show list view
 	if m.loading {
 		return "\n Loading Pokémon data...\n\n"
 	}
@@ -137,8 +180,11 @@ func (m Model) View() string {
 		return "\n No Pokémon data found. Please run the data fetch first.\n\n"
 	}
 
+	var s strings.Builder
+
 	// Header
-	s := titleStyle.Render("Pokémon List") + "\n\n"
+	s.WriteString(titleStyle.Render("Pokémon List"))
+	s.WriteString("\n\n")
 
 	// Calculate visible range for pagination
 	start := 0
@@ -177,21 +223,26 @@ func (m Model) View() string {
 		line := fmt.Sprintf("%s [%s] #%s %s", cursor, checked, pokemon.ID, strings.Title(pokemon.Name))
 
 		if m.cursor == i {
-			s += selectedItemStyle.Render(line) + "\n"
+			s.WriteString(selectedItemStyle.Render(line))
+			s.WriteString("\n")
 		} else {
-			s += itemStyle.Render(line) + "\n"
+			s.WriteString(itemStyle.Render(line))
+			s.WriteString("\n")
 		}
 	}
 
 	// Pagination info
 	if maxVisible > 0 && len(m.pokemonList) > maxVisible {
-		s += paginationStyle.Render(fmt.Sprintf("Showing %d-%d of %d", start+1, end, len(m.pokemonList))) + "\n"
+		s.WriteString(paginationStyle.Render(fmt.Sprintf("Showing %d-%d of %d", start+1, end, len(m.pokemonList))))
+		s.WriteString("\n")
 	}
 
 	// Help
-	s += "\n" + helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • q: quit • home/end: first/last • pgup/pgdn: page") + "\n"
+	s.WriteString("\n")
+	s.WriteString(helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • L: lookup • q: quit • home/end: first/last • pgup/pgdn: page"))
+	s.WriteString("\n")
 
-	return s
+	return s.String()
 }
 
 // pokemonDataMsg is used to pass loaded Pokemon data to the model
@@ -200,3 +251,6 @@ type pokemonDataMsg struct {
 	err         error
 }
 
+// Message types for view switching
+type switchToListViewMsg struct{}
+type switchToLookupViewMsg struct{}

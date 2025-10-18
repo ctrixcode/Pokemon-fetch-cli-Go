@@ -37,14 +37,6 @@ type PokemonData struct {
 			Name string `json:"name"`
 			Url  string `json:"url"`
 		} `json:"item"`
-		// seems useless
-		// Version_details []struct {
-		// 	Rarity  int `json:"rarity"`
-		// 	Version struct {
-		// 		Name string `json:"name"`
-		// 		Url  string `json:"url"`
-		// 	}
-		// } `json:"version_details"`
 	} `json:"held_items"`
 	Name   string `json:"name"`
 	Order  int    `json:"order"`
@@ -54,18 +46,6 @@ type PokemonData struct {
 			Name string `json:"name"`
 			Url  string `json:"url"`
 		} `json:"move"`
-		// useful to know moves learnt first generation
-		// Version_group_details []struct {
-		// 	Level_learned_at  int `json:"level_learned_at"`
-		// 	Move_learn_method struct {
-		// 		Name string `json:"name"`
-		// 		Url  string `json:"url"`
-		// 	} `json:"move_learn_method"`
-		// 	Version_group struct {
-		// 		Name string `json:"name"`
-		// 		Url  string `json:"url"`
-		// 	} `json:"version_group"`
-		// } `json:"version_group_details"`
 	} `json:"moves"`
 	Species struct {
 		Name string `json:"name"`
@@ -98,6 +78,34 @@ type PokemonData struct {
 	} `json:"types"`
 }
 
+// FetchPokemon fetches a single Pokemon by name or ID from the PokeAPI
+func FetchPokemon(nameOrID string) (*PokemonData, error) {
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%s", nameOrID)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch pokemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("pokemon not found: %s (status: %d)", nameOrID, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var data PokemonData
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse pokemon data: %w", err)
+	}
+
+	return &data, nil
+}
+
 func fetchAllPokemon() {
 	const limit int = 1025
 	var wq sync.WaitGroup
@@ -116,29 +124,55 @@ func fetchPokemonData(id int, wq *sync.WaitGroup) {
 	storePokemon(resp.Body)
 	wq.Done()
 }
+
 func storePokemon(respBody io.ReadCloser) {
 	body, err := io.ReadAll(respBody)
 	if err != nil {
 		fmt.Println("Error during Converting body into byte", ": ", err)
+		return
 	}
 	var data PokemonData
 	err = json.Unmarshal(body, &data)
 	if err != nil {
 		fmt.Println("err:", err)
+		return
 	}
 	dataFiltered, err := json.Marshal(data)
 	if err != nil {
 		fmt.Println("Error trying to convert filtered data into byte", data.Id, ": ", err)
+		return
 	}
-	// fmt.Println(data.Id, data.Name)
-	os.WriteFile("data/"+fmt.Sprint(data.Id)+".json", dataFiltered, 0655)
+
+	err = os.WriteFile("data/"+fmt.Sprint(data.Id)+".json", dataFiltered, 0644)
+	if err != nil {
+		fmt.Println("Error writing file for Pokemon", data.Id, ":", err)
+	}
 }
+
 func StoreData() {
+	// Create data directory if it doesn't exist
+	if err := os.MkdirAll("data", 0755); err != nil {
+		fmt.Println("Error creating data directory:", err)
+		return
+	}
+
+	// Create pokemon directory if it doesn't exist
+	if err := os.MkdirAll("pokemon", 0755); err != nil {
+		fmt.Println("Error creating pokemon directory:", err)
+		return
+	}
+
+	// Check if we've already fetched data
 	if _, err := os.Stat("pokemon/init.txt"); errors.Is(err, os.ErrNotExist) {
+		fmt.Println("Fetching all Pokémon data (this may take a while)...")
 		fetchAllPokemon()
+		fmt.Println("Fetch complete! Creating init marker file...")
+
 		_, err := os.Create("pokemon/init.txt")
 		if err != nil {
-			println("file cannot be created: ", err)
+			fmt.Println("Warning: file cannot be created:", err)
 		}
+	} else {
+		fmt.Println("Data already fetched (found pokemon/init.txt)")
 	}
 }
