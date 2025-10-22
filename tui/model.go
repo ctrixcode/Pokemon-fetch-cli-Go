@@ -74,7 +74,6 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles user input and updates the model state
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Handle view switching messages
 	switch msg.(type) {
 	case switchToListViewMsg:
 		m.currentView = listViewMode
@@ -82,9 +81,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case switchToLookupViewMsg:
+		// Consolidated lookup view initialization
+		if m.lookupView == nil {
+			m.lookupView = NewLookupView()
+			cmd := m.lookupView.Init()
+			m.currentView = lookupViewMode
+			return m, cmd
+		}
 		m.currentView = lookupViewMode
-		m.lookupView = NewLookupView()
-		return m, m.lookupView.Init()
+		return m, nil
 	}
 
 	// Delegate to lookup view if active
@@ -110,10 +115,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "l", "L":
-			// Switch to lookup view
-			m.currentView = lookupViewMode
-			m.lookupView = NewLookupView()
-			return m, m.lookupView.Init()
+			// Refactored to use message dispatch
+			return m, func() tea.Msg { return switchToLookupViewMsg{} }
 
 		case "up", "k":
 			if m.cursor > 0 {
@@ -127,8 +130,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter", " ":
 			if len(m.pokemonList) > 0 {
-				_, ok := m.selected[m.cursor]
-				if ok {
+				if _, ok := m.selected[m.cursor]; ok {
 					delete(m.selected, m.cursor)
 				} else {
 					m.selected[m.cursor] = struct{}{}
@@ -162,12 +164,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the TUI
 func (m Model) View() string {
-	// Show lookup view if active
 	if m.currentView == lookupViewMode && m.lookupView != nil {
 		return m.lookupView.View()
 	}
 
-	// Show list view
 	if m.loading {
 		return "\n Loading Pokémon data...\n\n"
 	}
@@ -181,18 +181,14 @@ func (m Model) View() string {
 	}
 
 	var s strings.Builder
-
-	// Header
 	s.WriteString(titleStyle.Render("Pokémon List"))
 	s.WriteString("\n\n")
 
-	// Calculate visible range for pagination
 	start := 0
 	end := len(m.pokemonList)
-	maxVisible := m.height - 8 // Reserve space for header, help, and margins
+	maxVisible := m.height - 8
 
 	if maxVisible > 0 && len(m.pokemonList) > maxVisible {
-		// Center the cursor in the visible area
 		start = m.cursor - maxVisible/2
 		if start < 0 {
 			start = 0
@@ -207,7 +203,6 @@ func (m Model) View() string {
 		}
 	}
 
-	// Render Pokemon list
 	for i := start; i < end; i++ {
 		pokemon := m.pokemonList[i]
 		cursor := " "
@@ -224,20 +219,17 @@ func (m Model) View() string {
 
 		if m.cursor == i {
 			s.WriteString(selectedItemStyle.Render(line))
-			s.WriteString("\n")
 		} else {
 			s.WriteString(itemStyle.Render(line))
-			s.WriteString("\n")
 		}
+		s.WriteString("\n")
 	}
 
-	// Pagination info
 	if maxVisible > 0 && len(m.pokemonList) > maxVisible {
 		s.WriteString(paginationStyle.Render(fmt.Sprintf("Showing %d-%d of %d", start+1, end, len(m.pokemonList))))
 		s.WriteString("\n")
 	}
 
-	// Help
 	s.WriteString("\n")
 	s.WriteString(helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • L: lookup • q: quit • home/end: first/last • pgup/pgdn: page"))
 	s.WriteString("\n")

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"ctrix/pokemon-fetch-cli-go/pokemon"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -10,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/ctrixcode/Pokemon-fetch-cli-Go/pokemon"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

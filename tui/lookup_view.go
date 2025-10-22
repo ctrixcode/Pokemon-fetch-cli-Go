@@ -1,13 +1,13 @@
 package tui
 
 import (
-	"ctrix/pokemon-fetch-cli-go/pokemon"
 	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/ctrixcode/Pokemon-fetch-cli-Go/pokemon"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )

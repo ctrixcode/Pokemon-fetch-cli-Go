@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 type PokemonData struct {
@@ -82,7 +83,8 @@ type PokemonData struct {
 func FetchPokemon(nameOrID string) (*PokemonData, error) {
 	url := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%s", nameOrID)
 
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch pokemon: %w", err)
 	}
@@ -117,29 +119,47 @@ func fetchAllPokemon() {
 }
 
 func fetchPokemonData(id int, wq *sync.WaitGroup) {
-	resp, err := http.Get("https://pokeapi.co/api/v2/pokemon/" + fmt.Sprint(id))
+	defer wq.Done()
+
+	url := "https://pokeapi.co/api/v2/pokemon/" + fmt.Sprint(id)
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Get(url)
 	if err != nil {
-		fmt.Println("error with ", id, ": ", err)
+		fmt.Println("error fetching", id, ":", err)
+		return
 	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("pokemon", id, "fetch failed with status:", resp.StatusCode)
+		return
+	}
+
 	storePokemon(resp.Body)
-	wq.Done()
 }
 
 func storePokemon(respBody io.ReadCloser) {
+	if respBody != nil {
+		defer respBody.Close()
+	}
+
 	body, err := io.ReadAll(respBody)
 	if err != nil {
-		fmt.Println("Error during Converting body into byte", ": ", err)
+		fmt.Println("Error during Converting body into byte", ":", err)
 		return
 	}
+
 	var data PokemonData
 	err = json.Unmarshal(body, &data)
 	if err != nil {
 		fmt.Println("err:", err)
 		return
 	}
+
 	dataFiltered, err := json.Marshal(data)
 	if err != nil {
-		fmt.Println("Error trying to convert filtered data into byte", data.Id, ": ", err)
+		fmt.Println("Error trying to convert filtered data into byte", data.Id, ":", err)
 		return
 	}
 
@@ -168,7 +188,7 @@ func StoreData() {
 		fetchAllPokemon()
 		fmt.Println("Fetch complete! Creating init marker file...")
 
-		_, err := os.Create("pokemon/init.txt")
+		err := os.WriteFile("pokemon/init.txt", []byte{}, 0644)
 		if err != nil {
 			fmt.Println("Warning: file cannot be created:", err)
 		}

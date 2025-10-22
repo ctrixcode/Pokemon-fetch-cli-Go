@@ -1,11 +1,12 @@
 package main
 
 import (
-	"ctrix/pokemon-fetch-cli-go/pokemon"
-	"ctrix/pokemon-fetch-cli-go/tui"
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/ctrixcode/Pokemon-fetch-cli-Go/pokemon"
+	"github.com/ctrixcode/Pokemon-fetch-cli-Go/tui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -28,7 +29,7 @@ func main() {
 		fmt.Println("Fetching Pokemon data...")
 		pokemon.StoreData()
 		fmt.Println("Pokemon data fetched and stored successfully!")
-		
+
 		// If only fetch flag is provided, exit
 		if !*listFlag {
 			return
