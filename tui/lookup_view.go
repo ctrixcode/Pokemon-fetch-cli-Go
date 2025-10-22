@@ -39,11 +39,9 @@ var (
 				Foreground(lipgloss.Color("#7D56F4")).
 				Bold(true)
 
-	// Title caser for proper capitalization
 	titleCaser = cases.Title(language.English)
 )
 
-// LookupView represents the Pokemon lookup interface
 type LookupView struct {
 	input   textinput.Model
 	result  *pokemon.PokemonData
@@ -53,13 +51,11 @@ type LookupView struct {
 	height  int
 }
 
-// pokemonFetchedMsg is sent when Pokemon data is fetched from the API
 type pokemonFetchedMsg struct {
 	pokemon *pokemon.PokemonData
 	err     error
 }
 
-// NewLookupView creates a new lookup view
 func NewLookupView() *LookupView {
 	ti := textinput.New()
 	ti.Placeholder = "Enter Pokémon name or ID (e.g., pikachu or 25)"
@@ -74,64 +70,45 @@ func NewLookupView() *LookupView {
 	}
 }
 
-// Init initializes the lookup view
 func (v *LookupView) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-// Update handles messages for the lookup view
-func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
-	switch m := msg.(type) {
-	case tea.WindowSizeMsg:
-		v.width = m.Width
-		v.height = m.Height
-
-	case tea.KeyMsg:
-		switch m.String() {
-		case "enter":
-			if v.loading {
-				return nil
-			}
-
-			query := strings.TrimSpace(v.input.Value())
-
-			// If we have a result displayed, clear it and allow new search
-			if v.result != nil {
-				v.result = nil
-				v.err = nil
-				v.input.SetValue("")
-				v.input.Placeholder = "Enter Pokémon name or ID (e.g., pikachu or 25)"
-				v.input.Focus()
-				return nil
-			}
-
-			// If no query, show error
-			if query == "" {
-				v.err = fmt.Errorf("please enter a Pokémon name or ID")
-				return nil
-			}
-
-			// Fetch the pokemon
-			v.loading = true
-			v.err = nil
-			return fetchPokemonCmd(query)
-
-		case "esc":
-			return func() tea.Msg { return switchToListViewMsg{} }
-
-		case "ctrl+c":
-			return tea.Quit
-		}
-
-	case pokemonFetchedMsg:
-		v.loading = false
-		v.err = m.err
-		v.result = m.pokemon
-		v.input.Placeholder = "Press Enter to search again or type a new name"
+func (v *LookupView) fetchPokemonData() tea.Cmd {
+	input := strings.TrimSpace(v.input.Value())
+	if input == "" {
+		return nil
 	}
 
-	v.input, _ = v.input.Update(msg)
-	return nil
+	return func() tea.Msg {
+		data, err := pokemon.FetchPokemon(input)
+		return pokemonFetchedMsg{pokemon: data, err: err}
+	}
+}
+
+func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+
+	switch m := msg.(type) {
+	case tea.KeyMsg:
+		// Always update the input model first for proper async behavior
+		var inputCmd tea.Cmd
+		v.input, inputCmd = v.input.Update(m)
+		cmd = inputCmd
+
+		switch m.String() {
+		case "enter":
+			return tea.Batch(cmd, v.fetchPokemonData())
+		case "esc", "ctrl+c":
+			return tea.Batch(cmd, func() tea.Msg { return switchToListViewMsg{} })
+		default:
+			return cmd
+		}
+
+	default:
+		v.input, cmd = v.input.Update(msg)
+		return cmd
+	}
 }
 
 // View renders the lookup view
@@ -149,27 +126,22 @@ func (v *LookupView) View() string {
 	s.WriteString(lookupTitleStyle.Render("🔍 Pokémon Lookup"))
 	s.WriteString("\n\n")
 
-	// Loading
 	if v.loading {
 		s.WriteString("⏳ Fetching Pokémon data from API...\n\n")
 		s.WriteString(lookupHelpStyle.Render("Press ESC to cancel"))
 		return s.String()
 	}
 
-	// Error
 	if v.err != nil {
 		s.WriteString(lookupErrorStyle.Render(fmt.Sprintf("❌ Error: %v", v.err)))
 		s.WriteString("\n\n")
 	}
 
-	// Input
 	s.WriteString("Enter Pokémon name or ID:\n\n")
 	s.WriteString(lookupInputStyle.Render(v.input.View()))
 	s.WriteString("\n\n")
 
-	// Result
 	if v.result != nil {
-		// Name + ID header - Make it more prominent
 		divider := strings.Repeat("═", min(maxWidth-4, 60))
 		s.WriteString(divider)
 		s.WriteString("\n")
@@ -183,7 +155,6 @@ func (v *LookupView) View() string {
 		s.WriteString("\n")
 	}
 
-	// Help text
 	if v.result != nil {
 		s.WriteString(lookupHelpStyle.Render("Press Enter to search again • ESC to go back"))
 	} else {
@@ -193,7 +164,6 @@ func (v *LookupView) View() string {
 	return s.String()
 }
 
-// formatPokemonData formats the Pokemon data for display
 func (v *LookupView) formatPokemonData(maxWidth int) string {
 	if v.result == nil {
 		return ""
@@ -202,14 +172,12 @@ func (v *LookupView) formatPokemonData(maxWidth int) string {
 	p := v.result
 	var s strings.Builder
 
-	// Basic info
 	s.WriteString(lookupLabelStyle.Render("📊 Basic Information:"))
 	s.WriteString("\n")
 	s.WriteString(fmt.Sprintf("  Height: %d dm (%.1f m)\n", p.Height, float64(p.Height)/10))
 	s.WriteString(fmt.Sprintf("  Weight: %d hg (%.1f kg)\n", p.Weight, float64(p.Weight)/10))
 	s.WriteString(fmt.Sprintf("  Base Experience: %d\n\n", p.Base_experience))
 
-	// Types
 	if len(p.Types) > 0 {
 		s.WriteString(lookupLabelStyle.Render("🏷️  Types:"))
 		s.WriteString("\n")
@@ -219,7 +187,6 @@ func (v *LookupView) formatPokemonData(maxWidth int) string {
 		s.WriteString("\n")
 	}
 
-	// Abilities
 	if len(p.Abilities) > 0 {
 		s.WriteString(lookupLabelStyle.Render("⚡ Abilities:"))
 		s.WriteString("\n")
@@ -233,7 +200,6 @@ func (v *LookupView) formatPokemonData(maxWidth int) string {
 		s.WriteString("\n")
 	}
 
-	// Stats
 	if len(p.Stats) > 0 {
 		s.WriteString(lookupLabelStyle.Render("📈 Base Stats:"))
 		s.WriteString("\n")
@@ -252,14 +218,11 @@ func (v *LookupView) formatPokemonData(maxWidth int) string {
 		}
 	}
 
-	// Bottom divider
 	s.WriteString("\n")
 	s.WriteString(strings.Repeat("═", min(maxWidth-4, 60)))
-
 	return s.String()
 }
 
-// fetchPokemonCmd creates a command to fetch Pokemon data from the API
 func fetchPokemonCmd(nameOrID string) tea.Cmd {
 	return func() tea.Msg {
 		pokemonData, err := pokemon.FetchPokemon(nameOrID)
@@ -270,7 +233,6 @@ func fetchPokemonCmd(nameOrID string) tea.Cmd {
 	}
 }
 
-// min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {
 		return a
