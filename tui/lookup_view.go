@@ -66,7 +66,6 @@ func NewLookupView() *LookupView {
 	ti.CharLimit = 50
 	ti.Width = 50
 
-	// Initialize viewport with default size
 	vp := viewport.New(80, 16)
 	vp.YPosition = 8
 
@@ -83,7 +82,6 @@ func (v *LookupView) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-// Reset clears all state in the lookup view
 func (v *LookupView) Reset() {
 	v.result = nil
 	v.err = nil
@@ -115,20 +113,20 @@ func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
 		v.width = m.Width
 		v.height = m.Height
 
-		// Adjust input width based on window size
-		inputWidth := min(m.Width-10, 70)
-		if inputWidth < 30 {
-			inputWidth = 30
-		}
+		// Adjust input width based on window size (clamped 20..70)
+		inputWidth := clamp(m.Width-10, 20, 70)
 		v.input.Width = inputWidth
 
-		// Update viewport size
+		// Adjust viewport size (clamped)
 		headerHeight := 8 // Approximate height for title, input, and help text
-		v.viewport.Width = m.Width
-		v.viewport.Height = m.Height - headerHeight
+		v.viewport.Width = clamp(m.Width, 20, 200)
+		vh := m.Height - headerHeight
+		if vh < 3 {
+			vh = 3
+		}
+		v.viewport.Height = vh
 		v.viewport.YPosition = headerHeight
 
-		// Update viewport content if we have results
 		if v.result != nil {
 			v.viewport.SetContent(v.getResultContent())
 		}
@@ -137,7 +135,6 @@ func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		switch m.String() {
 		case "enter":
-			// If we have results, clear them for a new search
 			if v.result != nil {
 				v.result = nil
 				v.err = nil
@@ -147,7 +144,6 @@ func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
 				v.input.Focus()
 				return textinput.Blink
 			}
-			// Only fetch if there's actual input
 			if strings.TrimSpace(v.input.Value()) != "" {
 				v.loading = true
 				v.err = nil
@@ -158,18 +154,15 @@ func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
 			}
 			return nil
 		case "esc", "ctrl+c":
-			// Clear state before going back
 			v.Reset()
 			return func() tea.Msg { return switchToListViewMsg{} }
 		case "up", "down", "pgup", "pgdown", "home", "end":
-			// Only scroll if we have results
 			if v.result != nil {
 				v.viewport, cmd = v.viewport.Update(m)
 				return cmd
 			}
 			return nil
 		}
-		// Update input for all other keys
 		v.input, cmd = v.input.Update(m)
 		return cmd
 
@@ -178,19 +171,13 @@ func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
 		v.err = m.err
 		v.result = m.pokemon
 
-		// Update viewport with new content
 		v.viewport.SetContent(v.getResultContent())
 		v.viewport.GotoTop()
-
-		// Always clear the input after fetch (success or error)
 		v.input.SetValue("")
-
-		// Re-focus the input for the next search
 		v.input.Focus()
 		return textinput.Blink
 
 	default:
-		// Update viewport for mouse wheel scrolling
 		if v.result != nil {
 			v.viewport, cmd = v.viewport.Update(msg)
 			cmds = append(cmds, cmd)
@@ -218,7 +205,6 @@ func (v *LookupView) getResultContent() string {
 	contentWidth := min(maxWidth-4, 80)
 	divider := strings.Repeat("═", contentWidth)
 
-	// Add Pokemon name and ID at the top of scrollable content
 	s.WriteString("\n")
 	s.WriteString(divider + "\n")
 	s.WriteString(lookupSuccessStyle.Render(
@@ -234,11 +220,9 @@ func (v *LookupView) getResultContent() string {
 	return s.String()
 }
 
-// View renders the lookup view
 func (v *LookupView) View() string {
 	var s strings.Builder
 
-	// Title
 	title := lookupTitleStyle.Render("🔍 Pokémon Lookup")
 	s.WriteString(title + "\n\n")
 
@@ -253,14 +237,12 @@ func (v *LookupView) View() string {
 		s.WriteString("\n\n")
 	}
 
-	// Only show input box when there are no results
 	if v.result == nil {
 		s.WriteString("Enter Pokémon name or ID:\n\n")
 		s.WriteString(lookupInputStyle.Render(v.input.View()))
 		s.WriteString("\n\n")
 		s.WriteString(lookupHelpStyle.Render("Press Enter to search • ESC to go back"))
 	} else {
-		// Show viewport with results
 		s.WriteString(v.viewport.View())
 		s.WriteString("\n")
 		s.WriteString(lookupHelpStyle.Render("↑/↓: Scroll • Enter: New search • ESC: Go back"))
@@ -329,9 +311,20 @@ func (v *LookupView) formatPokemonData(maxWidth int) string {
 	return s.String()
 }
 
+// Helper functions
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
+}
+
+func clamp(value, minVal, maxVal int) int {
+	if value < minVal {
+		return minVal
+	}
+	if value > maxVal {
+		return maxVal
+	}
+	return value
 }

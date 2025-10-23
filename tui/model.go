@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // viewMode represents the current view
@@ -181,6 +183,7 @@ func (m Model) View() string {
 	}
 
 	var s strings.Builder
+	caser := cases.Title(language.English)
 	s.WriteString(titleStyle.Render("Pokémon List"))
 	s.WriteString("\n\n")
 
@@ -215,7 +218,7 @@ func (m Model) View() string {
 			checked = "✓"
 		}
 
-		line := fmt.Sprintf("%s [%s] #%s %s", cursor, checked, pokemon.ID, strings.Title(pokemon.Name))
+		line := fmt.Sprintf("%s [%s] #%s %s", cursor, checked, pokemon.ID, caser.String(pokemon.Name))
 
 		if m.cursor == i {
 			s.WriteString(selectedItemStyle.Render(line))
