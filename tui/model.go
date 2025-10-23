@@ -77,19 +77,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg.(type) {
 	case switchToListViewMsg:
 		m.currentView = listViewMode
-		m.lookupView = nil
 		return m, nil
 
 	case switchToLookupViewMsg:
-		// Consolidated lookup view initialization
+		// Initialize lookup view if it doesn't exist
 		if m.lookupView == nil {
 			m.lookupView = NewLookupView()
-			cmd := m.lookupView.Init()
-			m.currentView = lookupViewMode
-			return m, cmd
+		} else {
+			// Reset the lookup view to clear any previous state
+			m.lookupView.Reset()
 		}
 		m.currentView = lookupViewMode
-		return m, nil
+		cmd := m.lookupView.Init()
+		return m, cmd
 	}
 
 	// Delegate to lookup view if active
@@ -115,7 +115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "l", "L":
-			// Refactored to use message dispatch
+			// Switch to lookup view with message dispatch
 			return m, func() tea.Msg { return switchToLookupViewMsg{} }
 
 		case "up", "k":

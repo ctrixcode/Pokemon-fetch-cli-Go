@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ctrixcode/Pokemon-fetch-cli-Go/pokemon"
@@ -43,12 +44,14 @@ var (
 )
 
 type LookupView struct {
-	input   textinput.Model
-	result  *pokemon.PokemonData
-	err     error
-	loading bool
-	width   int
-	height  int
+	input    textinput.Model
+	viewport viewport.Model
+	result   *pokemon.PokemonData
+	err      error
+	loading  bool
+	width    int
+	height   int
+	ready    bool
 }
 
 type pokemonFetchedMsg struct {
@@ -63,15 +66,32 @@ func NewLookupView() *LookupView {
 	ti.CharLimit = 50
 	ti.Width = 50
 
+	// Initialize viewport with default size
+	vp := viewport.New(80, 16)
+	vp.YPosition = 8
+
 	return &LookupView{
-		input:  ti,
-		width:  80,
-		height: 24,
+		input:    ti,
+		viewport: vp,
+		width:    80,
+		height:   24,
+		ready:    true,
 	}
 }
 
 func (v *LookupView) Init() tea.Cmd {
 	return textinput.Blink
+}
+
+// Reset clears all state in the lookup view
+func (v *LookupView) Reset() {
+	v.result = nil
+	v.err = nil
+	v.loading = false
+	v.input.SetValue("")
+	v.viewport.SetContent("")
+	v.viewport.GotoTop()
+	v.input.Focus()
 }
 
 func (v *LookupView) fetchPokemonData() tea.Cmd {
@@ -88,43 +108,139 @@ func (v *LookupView) fetchPokemonData() tea.Cmd {
 
 func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
 	switch m := msg.(type) {
-	case tea.KeyMsg:
-		// Always update the input model first for proper async behavior
-		var inputCmd tea.Cmd
-		v.input, inputCmd = v.input.Update(m)
-		cmd = inputCmd
+	case tea.WindowSizeMsg:
+		v.width = m.Width
+		v.height = m.Height
 
+		// Adjust input width based on window size
+		inputWidth := min(m.Width-10, 70)
+		if inputWidth < 30 {
+			inputWidth = 30
+		}
+		v.input.Width = inputWidth
+
+		// Update viewport size
+		headerHeight := 8 // Approximate height for title, input, and help text
+		v.viewport.Width = m.Width
+		v.viewport.Height = m.Height - headerHeight
+		v.viewport.YPosition = headerHeight
+
+		// Update viewport content if we have results
+		if v.result != nil {
+			v.viewport.SetContent(v.getResultContent())
+		}
+		return nil
+
+	case tea.KeyMsg:
 		switch m.String() {
 		case "enter":
-			return tea.Batch(cmd, v.fetchPokemonData())
+			// If we have results, clear them for a new search
+			if v.result != nil {
+				v.result = nil
+				v.err = nil
+				v.viewport.SetContent("")
+				v.viewport.GotoTop()
+				v.input.SetValue("")
+				v.input.Focus()
+				return textinput.Blink
+			}
+			// Only fetch if there's actual input
+			if strings.TrimSpace(v.input.Value()) != "" {
+				v.loading = true
+				v.err = nil
+				v.result = nil
+				v.viewport.SetContent("")
+				v.viewport.GotoTop()
+				return v.fetchPokemonData()
+			}
+			return nil
 		case "esc", "ctrl+c":
-			return tea.Batch(cmd, func() tea.Msg { return switchToListViewMsg{} })
-		default:
-			return cmd
+			// Clear state before going back
+			v.Reset()
+			return func() tea.Msg { return switchToListViewMsg{} }
+		case "up", "down", "pgup", "pgdown", "home", "end":
+			// Only scroll if we have results
+			if v.result != nil {
+				v.viewport, cmd = v.viewport.Update(m)
+				return cmd
+			}
+			return nil
 		}
+		// Update input for all other keys
+		v.input, cmd = v.input.Update(m)
+		return cmd
+
+	case pokemonFetchedMsg:
+		v.loading = false
+		v.err = m.err
+		v.result = m.pokemon
+
+		// Update viewport with new content
+		v.viewport.SetContent(v.getResultContent())
+		v.viewport.GotoTop()
+
+		// Always clear the input after fetch (success or error)
+		v.input.SetValue("")
+
+		// Re-focus the input for the next search
+		v.input.Focus()
+		return textinput.Blink
 
 	default:
+		// Update viewport for mouse wheel scrolling
+		if v.result != nil {
+			v.viewport, cmd = v.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 		v.input, cmd = v.input.Update(msg)
-		return cmd
+		cmds = append(cmds, cmd)
+		return tea.Batch(cmds...)
 	}
 }
 
-// View renders the lookup view
-func (v *LookupView) View() string {
+func (v *LookupView) getResultContent() string {
+	if v.result == nil {
+		return ""
+	}
+
 	var s strings.Builder
 	maxWidth := v.width
 	if maxWidth < 60 {
 		maxWidth = 60
 	}
-	if maxWidth > 100 {
-		maxWidth = 100
+	if maxWidth > 120 {
+		maxWidth = 120
 	}
 
+	contentWidth := min(maxWidth-4, 80)
+	divider := strings.Repeat("═", contentWidth)
+
+	// Add Pokemon name and ID at the top of scrollable content
+	s.WriteString("\n")
+	s.WriteString(divider + "\n")
+	s.WriteString(lookupSuccessStyle.Render(
+		fmt.Sprintf("  %s (ID: #%d)", strings.ToUpper(v.result.Name), v.result.Id),
+	))
+	s.WriteString("\n")
+	s.WriteString(divider + "\n\n")
+
+	s.WriteString(v.formatPokemonData(maxWidth))
+	s.WriteString("\n")
+	s.WriteString(divider + "\n")
+
+	return s.String()
+}
+
+// View renders the lookup view
+func (v *LookupView) View() string {
+	var s strings.Builder
+
 	// Title
-	s.WriteString(lookupTitleStyle.Render("🔍 Pokémon Lookup"))
-	s.WriteString("\n\n")
+	title := lookupTitleStyle.Render("🔍 Pokémon Lookup")
+	s.WriteString(title + "\n\n")
 
 	if v.loading {
 		s.WriteString("⏳ Fetching Pokémon data from API...\n\n")
@@ -137,28 +253,17 @@ func (v *LookupView) View() string {
 		s.WriteString("\n\n")
 	}
 
-	s.WriteString("Enter Pokémon name or ID:\n\n")
-	s.WriteString(lookupInputStyle.Render(v.input.View()))
-	s.WriteString("\n\n")
-
-	if v.result != nil {
-		divider := strings.Repeat("═", min(maxWidth-4, 60))
-		s.WriteString(divider)
-		s.WriteString("\n")
-		s.WriteString(lookupSuccessStyle.Render(
-			fmt.Sprintf("  %s (ID: #%d)", strings.ToUpper(v.result.Name), v.result.Id),
-		))
-		s.WriteString("\n")
-		s.WriteString(divider)
+	// Only show input box when there are no results
+	if v.result == nil {
+		s.WriteString("Enter Pokémon name or ID:\n\n")
+		s.WriteString(lookupInputStyle.Render(v.input.View()))
 		s.WriteString("\n\n")
-		s.WriteString(v.formatPokemonData(maxWidth))
-		s.WriteString("\n")
-	}
-
-	if v.result != nil {
-		s.WriteString(lookupHelpStyle.Render("Press Enter to search again • ESC to go back"))
-	} else {
 		s.WriteString(lookupHelpStyle.Render("Press Enter to search • ESC to go back"))
+	} else {
+		// Show viewport with results
+		s.WriteString(v.viewport.View())
+		s.WriteString("\n")
+		s.WriteString(lookupHelpStyle.Render("↑/↓: Scroll • Enter: New search • ESC: Go back"))
 	}
 
 	return s.String()
@@ -204,6 +309,9 @@ func (v *LookupView) formatPokemonData(maxWidth int) string {
 		s.WriteString(lookupLabelStyle.Render("📈 Base Stats:"))
 		s.WriteString("\n")
 		maxBarWidth := min(maxWidth-30, 40)
+		if maxBarWidth < 10 {
+			maxBarWidth = 10
+		}
 		for _, stat := range p.Stats {
 			statName := titleCaser.String(stat.Stat.Name)
 			barLength := (stat.Base_stat * maxBarWidth) / 255
@@ -218,19 +326,7 @@ func (v *LookupView) formatPokemonData(maxWidth int) string {
 		}
 	}
 
-	s.WriteString("\n")
-	s.WriteString(strings.Repeat("═", min(maxWidth-4, 60)))
 	return s.String()
-}
-
-func fetchPokemonCmd(nameOrID string) tea.Cmd {
-	return func() tea.Msg {
-		pokemonData, err := pokemon.FetchPokemon(nameOrID)
-		if err != nil {
-			return pokemonFetchedMsg{pokemon: nil, err: err}
-		}
-		return pokemonFetchedMsg{pokemon: pokemonData, err: nil}
-	}
 }
 
 func min(a, b int) int {
