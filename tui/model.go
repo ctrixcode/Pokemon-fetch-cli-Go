@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -17,13 +17,14 @@ type PokemonListItem struct {
 
 // Model represents the TUI state for the Pokemon list
 type Model struct {
-	pokemonList  []PokemonListItem
-	cursor       int
-	selected     map[int]struct{}
-	width        int
-	height       int
-	loading      bool
-	err          error
+	pokemonList   []PokemonListItem
+	cursor        int
+	selected      map[int]struct{}
+	width         int
+	height        int
+	loading       bool
+	err           error
+	statusMessage string
 }
 
 // Styling
@@ -45,6 +46,10 @@ var (
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
+
+	statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("205")).
+			Bold(true)
 )
 
 // NewModel creates a new model for the Pokemon list TUI
@@ -72,6 +77,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pokemonList = msg.pokemonList
 		m.loading = false
 		m.err = msg.err
+
+	case exportSuccessMsg:
+		m.statusMessage = fmt.Sprintf("✓ Exported to: %s", msg.filePath)
+		return m, nil
+
+	case exportErrorMsg:
+		m.statusMessage = fmt.Sprintf("✗ Export failed: %v", msg.err)
+		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -117,6 +130,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor >= len(m.pokemonList) {
 				m.cursor = len(m.pokemonList) - 1
 			}
+
+		case "e":
+			// Export selected Pokemon or all if none selected
+			var pokemonsToExport []PokemonListItem
+
+			if len(m.selected) > 0 {
+				// Export only selected Pokemon
+				for idx := range m.selected {
+					if idx < len(m.pokemonList) {
+						pokemonsToExport = append(pokemonsToExport, m.pokemonList[idx])
+					}
+				}
+				m.statusMessage = fmt.Sprintf("Exporting %d selected Pokémon...", len(pokemonsToExport))
+			} else {
+				// Export all Pokemon
+				pokemonsToExport = m.pokemonList
+				m.statusMessage = fmt.Sprintf("Exporting all %d Pokémon...", len(pokemonsToExport))
+			}
+
+			if len(pokemonsToExport) == 0 {
+				m.statusMessage = "No Pokémon to export!"
+				return m, nil
+			}
+
+			return m, ExportPokemonList(pokemonsToExport)
 		}
 	}
 
@@ -143,7 +181,7 @@ func (m Model) View() string {
 	// Calculate visible range for pagination
 	start := 0
 	end := len(m.pokemonList)
-	maxVisible := m.height - 8 // Reserve space for header, help, and margins
+	maxVisible := m.height - 10 // Reserve space for header, help, status, and margins
 
 	if maxVisible > 0 && len(m.pokemonList) > maxVisible {
 		// Center the cursor in the visible area
@@ -188,8 +226,13 @@ func (m Model) View() string {
 		s += paginationStyle.Render(fmt.Sprintf("Showing %d-%d of %d", start+1, end, len(m.pokemonList))) + "\n"
 	}
 
+	// Status message
+	if m.statusMessage != "" {
+		s += "\n" + statusStyle.Render(m.statusMessage) + "\n"
+	}
+
 	// Help
-	s += "\n" + helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • q: quit • home/end: first/last • pgup/pgdn: page") + "\n"
+	s += "\n" + helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • e: export • q: quit • home/end: first/last • pgup/pgdn: page") + "\n"
 
 	return s
 }
@@ -199,4 +242,3 @@ type pokemonDataMsg struct {
 	pokemonList []PokemonListItem
 	err         error
 }
-
