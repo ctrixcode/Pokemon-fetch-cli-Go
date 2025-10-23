@@ -134,7 +134,12 @@ func (v *LookupView) Update(msg tea.Msg) tea.Cmd {
 
 	case tea.KeyMsg:
 		switch m.String() {
+		case "q", "Q":
+			return tea.Quit
 		case "enter":
+			if v.loading {
+				return nil
+			}
 			if v.result != nil {
 				v.result = nil
 				v.err = nil
