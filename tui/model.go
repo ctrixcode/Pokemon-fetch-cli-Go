@@ -36,6 +36,14 @@ type Model struct {
 	err         error
 	currentView viewMode
 	lookupView  *LookupView
+	pokemonList   []PokemonListItem
+	cursor        int
+	selected      map[int]struct{}
+	width         int
+	height        int
+	loading       bool
+	err           error
+	statusMessage string
 }
 
 // Styling
@@ -57,6 +65,10 @@ var (
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
+
+	statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("205")).
+			Bold(true)
 )
 
 // NewModel creates a new model for the Pokemon list TUI
@@ -111,6 +123,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.err = msg.err
 
+	case exportSuccessMsg:
+		m.statusMessage = fmt.Sprintf("✓ Exported to: %s", msg.filePath)
+		return m, nil
+
+	case exportErrorMsg:
+		m.statusMessage = fmt.Sprintf("✗ Export failed: %v", msg.err)
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -158,6 +178,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor >= len(m.pokemonList) {
 				m.cursor = len(m.pokemonList) - 1
 			}
+
+		case "e":
+			// Export selected Pokemon or all if none selected
+			var pokemonsToExport []PokemonListItem
+
+			if len(m.selected) > 0 {
+				// Export only selected Pokemon
+				for idx := range m.selected {
+					if idx < len(m.pokemonList) {
+						pokemonsToExport = append(pokemonsToExport, m.pokemonList[idx])
+					}
+				}
+				m.statusMessage = fmt.Sprintf("Exporting %d selected Pokémon...", len(pokemonsToExport))
+			} else {
+				// Export all Pokemon
+				pokemonsToExport = m.pokemonList
+				m.statusMessage = fmt.Sprintf("Exporting all %d Pokémon...", len(pokemonsToExport))
+			}
+
+			if len(pokemonsToExport) == 0 {
+				m.statusMessage = "No Pokémon to export!"
+				return m, nil
+			}
+
+			return m, ExportPokemonList(pokemonsToExport)
 		}
 	}
 
@@ -189,7 +234,7 @@ func (m Model) View() string {
 
 	start := 0
 	end := len(m.pokemonList)
-	maxVisible := m.height - 8
+	maxVisible := m.height - 10 // Reserve space for header, help, status, and margins
 
 	if maxVisible > 0 && len(m.pokemonList) > maxVisible {
 		start = m.cursor - maxVisible/2
@@ -236,6 +281,13 @@ func (m Model) View() string {
 	s.WriteString("\n")
 	s.WriteString(helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • L: lookup • q: quit • home/end: first/last • pgup/pgdn: page"))
 	s.WriteString("\n")
+	// Status message
+	if m.statusMessage != "" {
+		s += "\n" + statusStyle.Render(m.statusMessage) + "\n"
+	}
+
+	// Help
+	s += "\n" + helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • e: export • q: quit • home/end: first/last • pgup/pgdn: page") + "\n"
 
 	return s.String()
 }

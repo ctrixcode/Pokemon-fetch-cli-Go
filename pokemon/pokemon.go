@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
+// PokemonData defines the structure of Pokémon API data
 type PokemonData struct {
 	Abilities []struct {
 		Ability struct {
@@ -28,7 +30,7 @@ type PokemonData struct {
 	} `json:"cries"`
 	Forms []struct {
 		Name string `json:"name"`
-		Url  string `json:"url"`
+		URL  string `json:"url"`
 	} `json:"forms"`
 	Height                   int    `json:"height"`
 	Id                       int    `json:"id"`
@@ -37,7 +39,7 @@ type PokemonData struct {
 	Held_items               []struct {
 		Item struct {
 			Name string `json:"name"`
-			Url  string `json:"url"`
+			URL  string `json:"url"`
 		} `json:"item"`
 	} `json:"held_items"`
 	Name   string `json:"name"`
@@ -46,12 +48,12 @@ type PokemonData struct {
 	Moves  []struct {
 		Move struct {
 			Name string `json:"name"`
-			Url  string `json:"url"`
+			URL  string `json:"url"`
 		} `json:"move"`
 	} `json:"moves"`
 	Species struct {
 		Name string `json:"name"`
-		Url  string `json:"url"`
+		URL  string `json:"url"`
 	} `json:"species"`
 	Sprites struct {
 		Back_default       string `json:"back_default"`
@@ -68,14 +70,14 @@ type PokemonData struct {
 		Effort    int `json:"effort"`
 		Stat      struct {
 			Name string `json:"name"`
-			Url  string `json:"url"`
+			URL  string `json:"url"`
 		} `json:"stat"`
 	} `json:"stats"`
 	Types []struct {
 		Slot int `json:"slot"`
 		Type struct {
 			Name string `json:"name"`
-			Url  string `json:"url"`
+			URL  string `json:"url"`
 		} `json:"type"`
 	} `json:"types"`
 }
@@ -119,6 +121,7 @@ func fetchAllPokemon() {
 	wq.Wait()
 }
 
+// Fetch data for a single Pokémon and store it
 func fetchPokemonData(id int, wq *sync.WaitGroup) {
 	defer wq.Done()
 
