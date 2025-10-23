@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const quitMessage = "\nPress 'q' to quit\n"
@@ -38,6 +41,7 @@ type PokemonDetail struct {
 
 func (m Model) renderDetailView() string {
 	var sb strings.Builder
+	caser := cases.Title(language.English)
 
 	sb.WriteString("Pokemon Detail View\n")
 	sb.WriteString("===================\n\n")
@@ -56,7 +60,7 @@ func (m Model) renderDetailView() string {
 		return sb.String()
 	}
 
-	sb.WriteString(fmt.Sprintf("Name: %s\n", strings.Title(pokemon.Name)))
+	sb.WriteString(fmt.Sprintf("Name: %s\n", caser.String(pokemon.Name)))
 	sb.WriteString(fmt.Sprintf("ID: %d\n", pokemon.ID))
 	sb.WriteString(fmt.Sprintf("Height: %d\n", pokemon.Height))
 	sb.WriteString(fmt.Sprintf("Weight: %d\n", pokemon.Weight))
@@ -65,7 +69,7 @@ func (m Model) renderDetailView() string {
 	if len(pokemon.Types) > 0 {
 		sb.WriteString("Types:\n")
 		for _, t := range pokemon.Types {
-			sb.WriteString(fmt.Sprintf("  - %s\n", strings.Title(t.Type.Name)))
+			sb.WriteString(fmt.Sprintf("  - %s\n", caser.String(t.Type.Name)))
 		}
 		sb.WriteString("\n")
 	}
@@ -77,7 +81,7 @@ func (m Model) renderDetailView() string {
 			if a.IsHidden {
 				hidden = " (Hidden)"
 			}
-			sb.WriteString(fmt.Sprintf("  - %s%s\n", strings.Title(a.Ability.Name), hidden))
+			sb.WriteString(fmt.Sprintf("  - %s%s\n", caser.String(a.Ability.Name), hidden))
 		}
 		sb.WriteString("\n")
 	}
@@ -85,7 +89,7 @@ func (m Model) renderDetailView() string {
 	if len(pokemon.Stats) > 0 {
 		sb.WriteString("Stats:\n")
 		for _, s := range pokemon.Stats {
-			sb.WriteString(fmt.Sprintf("  - %s: %d\n", strings.Title(s.Stat.Name), s.BaseStat))
+			sb.WriteString(fmt.Sprintf("  - %s: %d\n", caser.String(s.Stat.Name), s.BaseStat))
 		}
 	}
 

@@ -8,6 +8,26 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+var (
+	listTitleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color("#7D56F4")).
+			Padding(0, 1).
+			Bold(true)
+
+	listHeaderStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFA500")).
+			Bold(true)
+
+	listItemStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FAFAFA"))
+
+	listHelpStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241"))
 )
 
 type PokemonListItem struct {
@@ -18,32 +38,45 @@ type PokemonListItem struct {
 func (m Model) renderListView() string {
 	var sb strings.Builder
 
-	sb.WriteString("Pokemon List\n")
-	sb.WriteString("============\n\n")
+	// Clear any previous state and start fresh
+	sb.WriteString(listTitleStyle.Render("📋 Pokémon List"))
+	sb.WriteString("\n\n")
 
 	pokemonList := m.getPokemonList()
 
 	if len(pokemonList) == 0 {
-		sb.WriteString("No Pokemon data found. Please ensure data is fetched first.\n")
-	} else {
-		sb.WriteString(fmt.Sprintf("Total Pokemon: %d\n\n", len(pokemonList)))
-
-		displayCount := 20
-		if len(pokemonList) < displayCount {
-			displayCount = len(pokemonList)
-		}
-
-		for i := 0; i < displayCount; i++ {
-			pokemon := pokemonList[i]
-			sb.WriteString(fmt.Sprintf("%d. %s (ID: %d)\n", i+1, pokemon.Name, pokemon.ID))
-		}
-
-		if len(pokemonList) > displayCount {
-			sb.WriteString(fmt.Sprintf("\n... and %d more\n", len(pokemonList)-displayCount))
-		}
+		sb.WriteString("No Pokémon data found. Please ensure data is fetched first.\n\n")
+		sb.WriteString(listHelpStyle.Render("Press 'l' for lookup • 'q' to quit"))
+		return sb.String()
 	}
 
-	sb.WriteString("\nPress 'q' to quit\n")
+	sb.WriteString(listHeaderStyle.Render(fmt.Sprintf("Showing %d Pokémon", len(pokemonList))))
+	sb.WriteString("\n\n")
+
+	// Show first 20 Pokemon
+	displayCount := 20
+	if len(pokemonList) < displayCount {
+		displayCount = len(pokemonList)
+	}
+
+	for i := 0; i < displayCount; i++ {
+		pokemon := pokemonList[i]
+		// Format with proper spacing and styling
+		line := fmt.Sprintf("  [%s] #%-3d %s",
+			getCheckmark(i == m.selectedPokemon),
+			pokemon.ID,
+			capitalizeFirst(pokemon.Name))
+		sb.WriteString(listItemStyle.Render(line))
+		sb.WriteString("\n")
+	}
+
+	if len(pokemonList) > displayCount {
+		sb.WriteString(listHelpStyle.Render(fmt.Sprintf("\nShowing 1-%d of %d", displayCount, len(pokemonList))))
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(listHelpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • 'l': lookup • 'q': quit"))
 
 	return sb.String()
 }
@@ -96,4 +129,18 @@ func (m Model) getPokemonList() []PokemonListItem {
 	})
 
 	return pokemonList
+}
+
+func getCheckmark(selected bool) string {
+	if selected {
+		return "x"
+	}
+	return " "
+}
+
+func capitalizeFirst(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

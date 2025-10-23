@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"ctrix/pokemon-fetch-cli-go/pokemon"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -9,14 +8,18 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
-	"github.com/charmbracelet/bubbletea"
+	"github.com/ctrixcode/Pokemon-fetch-cli-Go/pokemon"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // LoadPokemonFromFiles loads Pokemon data from JSON files and extracts names
 func LoadPokemonFromFiles() tea.Msg {
 	var pokemonList []PokemonListItem
+	caser := cases.Title(language.English)
 
 	// Check if data directory exists
 	dataDir := "data"
@@ -62,7 +65,7 @@ func LoadPokemonFromFiles() tea.Msg {
 
 		pokemonList = append(pokemonList, PokemonListItem{
 			ID:   fmt.Sprintf("%d", pokemonData.Id),
-			Name: strings.Title(pokemonData.Name),
+			Name: caser.String(pokemonData.Name),
 			File: file,
 		})
 	}

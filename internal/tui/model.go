@@ -1,9 +1,8 @@
 package tui
 
 import (
-	"ctrix/pokemon-fetch-cli-go/pokemon"
-
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/ctrixcode/Pokemon-fetch-cli-Go/pokemon"
 )
 
 type viewState int

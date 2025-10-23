@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // PokemonData defines the structure of Pokémon API data
@@ -80,7 +82,35 @@ type PokemonData struct {
 	} `json:"types"`
 }
 
-// Fetch all Pokémon data concurrently
+// FetchPokemon fetches a single Pokemon by name or ID from the PokeAPI
+func FetchPokemon(nameOrID string) (*PokemonData, error) {
+	safeName := url.PathEscape(nameOrID)
+	apiURL := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%s", safeName)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch pokemon: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("pokemon not found: %s (status: %d)", nameOrID, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var data PokemonData
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, fmt.Errorf("failed to parse pokemon data: %w", err)
+	}
+
+	return &data, nil
+}
+
 func fetchAllPokemon() {
 	const limit int = 1025
 	var wq sync.WaitGroup
@@ -95,84 +125,69 @@ func fetchAllPokemon() {
 func fetchPokemonData(id int, wq *sync.WaitGroup) {
 	defer wq.Done()
 
-	resp, err := http.Get("https://pokeapi.co/api/v2/pokemon/" + fmt.Sprint(id))
+	client := &http.Client{Timeout: 10 * time.Second}
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%d", id)
+
+	resp, err := client.Get(url)
 	if err != nil {
-		fmt.Println("error fetching Pokémon", id, ":", err)
+		fmt.Println("error fetching", id, ":", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, resp.Body) // drain body for connection reuse
-		fmt.Println("unexpected status for Pokémon", id, ":", resp.Status)
+		fmt.Println("pokemon", id, "fetch failed with status:", resp.StatusCode)
 		return
 	}
 
-	storePokemon(id, resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("error reading body for", id, ":", err)
+		return
+	}
+
+	storePokemon(body)
 }
 
-// Store a Pokémon’s JSON data to disk
-func storePokemon(id int, respBody io.ReadCloser) {
-	body, err := io.ReadAll(respBody)
-	if err != nil {
-		fmt.Println("Error reading body for Pokémon", id, ":", err)
-		return
-	}
-
+func storePokemon(body []byte) {
 	var data PokemonData
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		fmt.Println("Error unmarshalling Pokémon JSON for ID", id, ":", err)
+	if err := json.Unmarshal(body, &data); err != nil {
+		fmt.Println("err:", err)
 		return
 	}
 
-	dataFiltered, err := json.MarshalIndent(data, "", "  ")
+	dataFiltered, err := json.Marshal(data)
 	if err != nil {
-		fmt.Println("Error converting Pokémon data to JSON for ID", id, ":", err)
+		fmt.Println("Error trying to convert filtered data into byte", data.Id, ":", err)
 		return
 	}
 
-	// Get working directory for stable data path
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Println("Error getting working directory:", err)
-		return
+	if err := os.WriteFile("data/"+fmt.Sprint(data.Id)+".json", dataFiltered, 0644); err != nil {
+		fmt.Println("Error writing file for Pokemon", data.Id, ":", err)
 	}
-	dataDir := filepath.Join(cwd, "data")
+}
 
-	// Create data directory if missing
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+func StoreData() {
+	// Create directories if they don't exist
+	if err := os.MkdirAll("data", 0755); err != nil {
 		fmt.Println("Error creating data directory:", err)
 		return
 	}
-
-	filePath := filepath.Join(dataDir, fmt.Sprintf("%d.json", data.Id))
-	if err := os.WriteFile(filePath, dataFiltered, 0o644); err != nil {
-		fmt.Println("Error writing Pokémon JSON for ID", id, ":", err)
-	}
-}
-
-// StoreData triggers fetching all Pokémon if not already initialized
-func StoreData() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Println("Error getting working directory:", err)
+	if err := os.MkdirAll("pokemon", 0755); err != nil {
+		fmt.Println("Error creating pokemon directory:", err)
 		return
 	}
 
-	dataDir := filepath.Join(cwd, "data")
-	initMarker := filepath.Join(dataDir, "init.txt")
-
-	if _, err := os.Stat(initMarker); errors.Is(err, os.ErrNotExist) {
-		fmt.Println("Fetching Pokémon data for the first time... this may take a while.")
+	// Check if data already fetched
+	if _, err := os.Stat("pokemon/init.txt"); errors.Is(err, os.ErrNotExist) {
+		fmt.Println("Fetching all Pokémon data (this may take a while)...")
 		fetchAllPokemon()
+		fmt.Println("Fetch complete! Creating init marker file...")
 
-		if err := os.WriteFile(initMarker, []byte("initialized"), 0o644); err != nil {
-			fmt.Println("Error creating init marker file:", err)
-		} else {
-			fmt.Println("All Pokémon data stored successfully.")
+		if err := os.WriteFile("pokemon/init.txt", []byte{}, 0644); err != nil {
+			fmt.Println("Warning: could not create init marker:", err)
 		}
 	} else {
-		fmt.Println("Pokémon data already initialized.")
+		fmt.Println("Data already fetched (found pokemon/init.txt)")
 	}
 }

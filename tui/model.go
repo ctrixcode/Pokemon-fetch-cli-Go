@@ -6,6 +6,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+)
+
+// viewMode represents the current view
+type viewMode int
+
+const (
+	listViewMode viewMode = iota
+	lookupViewMode
 )
 
 // PokemonListItem represents a single Pokemon in the list
@@ -17,6 +27,15 @@ type PokemonListItem struct {
 
 // Model represents the TUI state for the Pokemon list
 type Model struct {
+	pokemonList []PokemonListItem
+	cursor      int
+	selected    map[int]struct{}
+	width       int
+	height      int
+	loading     bool
+	err         error
+	currentView viewMode
+	lookupView  *LookupView
 	pokemonList   []PokemonListItem
 	cursor        int
 	selected      map[int]struct{}
@@ -58,6 +77,7 @@ func NewModel() Model {
 		pokemonList: []PokemonListItem{},
 		selected:    make(map[int]struct{}),
 		loading:     true,
+		currentView: listViewMode,
 	}
 }
 
@@ -68,6 +88,31 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles user input and updates the model state
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case switchToListViewMsg:
+		m.currentView = listViewMode
+		return m, nil
+
+	case switchToLookupViewMsg:
+		// Initialize lookup view if it doesn't exist
+		if m.lookupView == nil {
+			m.lookupView = NewLookupView()
+		} else {
+			// Reset the lookup view to clear any previous state
+			m.lookupView.Reset()
+		}
+		m.currentView = lookupViewMode
+		cmd := m.lookupView.Init()
+		return m, cmd
+	}
+
+	// Delegate to lookup view if active
+	if m.currentView == lookupViewMode && m.lookupView != nil {
+		cmd := m.lookupView.Update(msg)
+		return m, cmd
+	}
+
+	// Handle list view updates
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -91,6 +136,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
+		case "l", "L":
+			// Switch to lookup view with message dispatch
+			return m, func() tea.Msg { return switchToLookupViewMsg{} }
+
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -103,8 +152,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter", " ":
 			if len(m.pokemonList) > 0 {
-				_, ok := m.selected[m.cursor]
-				if ok {
+				if _, ok := m.selected[m.cursor]; ok {
 					delete(m.selected, m.cursor)
 				} else {
 					m.selected[m.cursor] = struct{}{}
@@ -163,6 +211,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the TUI
 func (m Model) View() string {
+	if m.currentView == lookupViewMode && m.lookupView != nil {
+		return m.lookupView.View()
+	}
+
 	if m.loading {
 		return "\n Loading Pokémon data...\n\n"
 	}
@@ -175,16 +227,16 @@ func (m Model) View() string {
 		return "\n No Pokémon data found. Please run the data fetch first.\n\n"
 	}
 
-	// Header
-	s := titleStyle.Render("Pokémon List") + "\n\n"
+	var s strings.Builder
+	caser := cases.Title(language.English)
+	s.WriteString(titleStyle.Render("Pokémon List"))
+	s.WriteString("\n\n")
 
-	// Calculate visible range for pagination
 	start := 0
 	end := len(m.pokemonList)
 	maxVisible := m.height - 10 // Reserve space for header, help, status, and margins
 
 	if maxVisible > 0 && len(m.pokemonList) > maxVisible {
-		// Center the cursor in the visible area
 		start = m.cursor - maxVisible/2
 		if start < 0 {
 			start = 0
@@ -199,7 +251,6 @@ func (m Model) View() string {
 		}
 	}
 
-	// Render Pokemon list
 	for i := start; i < end; i++ {
 		pokemon := m.pokemonList[i]
 		cursor := " "
@@ -212,20 +263,24 @@ func (m Model) View() string {
 			checked = "✓"
 		}
 
-		line := fmt.Sprintf("%s [%s] #%s %s", cursor, checked, pokemon.ID, strings.Title(pokemon.Name))
+		line := fmt.Sprintf("%s [%s] #%s %s", cursor, checked, pokemon.ID, caser.String(pokemon.Name))
 
 		if m.cursor == i {
-			s += selectedItemStyle.Render(line) + "\n"
+			s.WriteString(selectedItemStyle.Render(line))
 		} else {
-			s += itemStyle.Render(line) + "\n"
+			s.WriteString(itemStyle.Render(line))
 		}
+		s.WriteString("\n")
 	}
 
-	// Pagination info
 	if maxVisible > 0 && len(m.pokemonList) > maxVisible {
-		s += paginationStyle.Render(fmt.Sprintf("Showing %d-%d of %d", start+1, end, len(m.pokemonList))) + "\n"
+		s.WriteString(paginationStyle.Render(fmt.Sprintf("Showing %d-%d of %d", start+1, end, len(m.pokemonList))))
+		s.WriteString("\n")
 	}
 
+	s.WriteString("\n")
+	s.WriteString(helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • L: lookup • q: quit • home/end: first/last • pgup/pgdn: page"))
+	s.WriteString("\n")
 	// Status message
 	if m.statusMessage != "" {
 		s += "\n" + statusStyle.Render(m.statusMessage) + "\n"
@@ -234,7 +289,7 @@ func (m Model) View() string {
 	// Help
 	s += "\n" + helpStyle.Render("↑/↓ or j/k: navigate • space/enter: select • e: export • q: quit • home/end: first/last • pgup/pgdn: page") + "\n"
 
-	return s
+	return s.String()
 }
 
 // pokemonDataMsg is used to pass loaded Pokemon data to the model
@@ -242,3 +297,7 @@ type pokemonDataMsg struct {
 	pokemonList []PokemonListItem
 	err         error
 }
+
+// Message types for view switching
+type switchToListViewMsg struct{}
+type switchToLookupViewMsg struct{}
